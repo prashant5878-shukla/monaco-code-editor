@@ -89,3 +89,38 @@ export function findNodeByName(root, name) {
     }
     return null;
 }
+
+// Build a file tree from a flat { "src/App.jsx": "content" } map
+// Used by resetTree when loading templates
+export function buildTreeFromFlat(flatFiles) {
+    const root = {
+        id: 'root',
+        name: 'my-project',
+        type: 'folder',
+        expanded: true,
+        children: [],
+    };
+
+    for (const [filePath, content] of Object.entries(flatFiles)) {
+        const parts = filePath.split('/').filter(Boolean);
+        let current = root;
+
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const isFile = i === parts.length - 1;
+
+            if (isFile) {
+                current.children.push({ id: genId(), name: part, type: 'file', content });
+            } else {
+                let folder = current.children.find(c => c.type === 'folder' && c.name === part);
+                if (!folder) {
+                    folder = { id: genId(), name: part, type: 'folder', expanded: true, children: [] };
+                    current.children.push(folder);
+                }
+                current = folder;
+            }
+        }
+    }
+
+    return root;
+}

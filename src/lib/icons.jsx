@@ -5,16 +5,17 @@ import {
   X, Check, Send, Sparkles, AlertTriangle,
   FileBox, Code, Terminal, Code2, ShieldAlert,
   FilePlus, FolderPlus,
-  MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow
+  MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
+  Layers, Play, Square,
 } from 'lucide-react';
 
 export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
   if (isFolder) {
     return isExpanded ? <FolderOpen className="w-[14px] h-[14px] text-accent" /> : <Folder className="w-[14px] h-[14px] text-secondary" />;
   }
-  
+
   const ext = fileName.split('.').pop()?.toLowerCase();
-  
+
   switch (ext) {
     case 'js':
     case 'jsx':
@@ -39,29 +40,11 @@ export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
 };
 
 export const Icons = {
-  File: File,
-  Folder: Folder,
-  FolderOpen: FolderOpen,
-  ChevronRight: ChevronRight,
-  Plus: Plus,
-  MoreVertical: MoreVertical,
-  Trash2: Trash2,
-  Edit2: Edit2,
-  X: X,
-  Check: Check,
-  Send: Send,
-  Sparkles: Sparkles,
-  AlertTriangle: AlertTriangle,
-  FileBox: FileBox,
-  Code: Code,
-  Code2: Code2,
-  ShieldAlert: ShieldAlert,
-  FilePlus: FilePlus,
-  FolderPlus: FolderPlus,
-  MonitorPlay: MonitorPlay,
-  RefreshCw: RefreshCw,
-  ExternalLink: ExternalLink,
-  Layout: Layout,
-  Columns: Columns,
-  AppWindow: AppWindow
+  File, Folder, FolderOpen, ChevronRight,
+  Plus, MoreVertical, Trash2, Edit2,
+  X, Check, Send, Sparkles, AlertTriangle,
+  FileBox, Code, Code2, ShieldAlert,
+  FilePlus, FolderPlus,
+  MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
+  Layers, Play, Square,
 };

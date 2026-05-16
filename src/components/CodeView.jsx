@@ -1,6 +1,7 @@
 import Editor from '@monaco-editor/react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { getLanguage } from '../lib/fileUtils';
+import { useMonacoDiff } from '../hooks/useMonacoDiff';
 import { MONACO_THEME_NAME, MONACO_THEME_CONFIG } from '../lib/constants';
 
 function configureMonaco(monaco) {
@@ -11,44 +12,31 @@ function configureMonaco(monaco) {
     moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
     module: monaco.languages.typescript.ModuleKind.ESNext,
     esModuleInterop: true,
-    allowJs: true, checkJs: false, strict: false, skipLibCheck: true,
+    allowJs: true,
+    checkJs: false,
+    strict: false,
+    skipLibCheck: true,
   });
 
-  // Define premium dark theme
   monaco.editor.defineTheme(MONACO_THEME_NAME, MONACO_THEME_CONFIG);
 }
 
-export function CodeView({ code, filePath, onChange, changedLines = [] }) {
-  const monacoRef = useRef(null);
+/**
+ * @param {object}  props
+ * @param {string}  props.code           Current file content (shown in editor)
+ * @param {string}  props.filePath       Used for language detection + per-file undo history
+ * @param {function} props.onChange      Called with new content on every keystroke
+ * @param {{ originalContent: string, changedLines: number[] } | null} props.pendingChange
+ * @param {function} props.onDiffStats   Receives { additions, deletions } | null
+ */
+export function CodeView({ code, filePath, onChange, pendingChange, onDiffStats }) {
   const editorRef = useRef(null);
-  const decorationsRef = useRef([]);
-
-  const changedLinesRef = useRef(changedLines);
-  useEffect(() => { changedLinesRef.current = changedLines; }, [changedLines]);
+  const monacoRef = useRef(null);
 
   const language = useMemo(() => getLanguage(filePath ?? ''), [filePath]);
 
-  function applyDecorations(lines) {
-    const monaco = monacoRef.current;
-    const editor = editorRef.current;
-    if (!monaco || !editor) return;
-
-    decorationsRef.current = editor.deltaDecorations(
-      decorationsRef.current,
-      lines.map((line) => ({
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: 'ai-changed-line',
-          linesDecorationsClassName: 'ai-changed-gutter',
-        },
-      }))
-    );
-  }
-
-  useEffect(() => {
-    applyDecorations(changedLines);
-  }, [changedLines]); // eslint-disable-line
+  // All diff logic (decorations + view zones) lives here
+  useMonacoDiff(editorRef, monacoRef, pendingChange, code, onDiffStats);
 
   return (
     <div className="w-full h-full bg-editor">
@@ -59,16 +47,13 @@ export function CodeView({ code, filePath, onChange, changedLines = [] }) {
         value={code}
         theme={MONACO_THEME_NAME}
         path={filePath}
-        onChange={(v) => onChange(v ?? '')}
-        beforeMount={(monaco) => {
+        onChange={v => onChange(v ?? '')}
+        beforeMount={monaco => {
           monacoRef.current = monaco;
           configureMonaco(monaco);
         }}
-        onMount={(editor) => {
+        onMount={editor => {
           editorRef.current = editor;
-          if (changedLinesRef.current.length > 0) {
-            applyDecorations(changedLinesRef.current);
-          }
         }}
         options={{
           minimap: { enabled: true, scale: 0.8, renderCharacters: false },
@@ -82,7 +67,7 @@ export function CodeView({ code, filePath, onChange, changedLines = [] }) {
           renderValidationDecorations: 'on',
           padding: { top: 24, bottom: 24 },
           stickyScroll: { enabled: true },
-          fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+          fontFamily: "'JetBrains Mono','Fira Code',Consolas,monospace",
           fontLigatures: true,
           smoothScrolling: true,
           cursorSmoothCaretAnimation: 'on',
@@ -91,7 +76,6 @@ export function CodeView({ code, filePath, onChange, changedLines = [] }) {
           bracketPairColorization: { enabled: true },
           guides: { bracketPairs: true },
           formatOnPaste: true,
-          suggest: { showKeywords: true, showSnippets: true },
           overviewRulerBorder: false,
         }}
       />

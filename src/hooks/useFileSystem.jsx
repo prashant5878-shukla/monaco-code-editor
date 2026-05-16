@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { genId } from '../lib/fileUtils';
+import { genId, buildTreeFromFlat } from '../lib/fileUtils';
 
-// ── Pure tree helpers (no mutation) ──────────────────────────────────────────
+// ── Pure tree helpers ─────────────────────────────────────────────────────────
 
 function findById(node, id) {
     if (node.id === id) return node;
@@ -12,14 +12,12 @@ function findById(node, id) {
     return null;
 }
 
-// Returns a new tree with the matching node replaced by updater(node)
 function updateNode(tree, id, updater) {
     if (tree.id === id) return { ...tree, ...updater(tree) };
     if (!tree.children) return tree;
     return { ...tree, children: tree.children.map(c => updateNode(c, id, updater)) };
 }
 
-// Returns a new tree with the node removed
 function removeNode(tree, id) {
     if (!tree.children) return tree;
     return {
@@ -30,11 +28,9 @@ function removeNode(tree, id) {
     };
 }
 
-// Returns a new tree with newNode inserted into parentId's children
 function insertNode(tree, parentId, newNode) {
     if (tree.id === parentId) {
         const children = tree.children ?? [];
-        // Keep folders before files
         const insertAt = newNode.type === 'folder'
             ? 0
             : children.filter(c => c.type === 'folder').length;
@@ -46,7 +42,6 @@ function insertNode(tree, parentId, newNode) {
     return { ...tree, children: tree.children.map(c => insertNode(c, parentId, newNode)) };
 }
 
-// Collect every file id in a subtree (used when deleting a folder)
 function collectFileIds(node) {
     if (node.type === 'file') return [node.id];
     return (node.children ?? []).flatMap(collectFileIds);
@@ -70,8 +65,7 @@ export const INITIAL_TREE = {
                     id: 'app-jsx',
                     name: 'App.jsx',
                     type: 'file',
-                    content:
-                        `import './App.css'
+                    content: `import './App.css'
 
 function App() {
   return (
@@ -88,8 +82,7 @@ export default App`,
                     id: 'app-css',
                     name: 'App.css',
                     type: 'file',
-                    content:
-                        `.app {
+                    content: `.app {
   max-width: 800px;
   margin: 0 auto;
   padding: 2rem;
@@ -104,8 +97,7 @@ h1 {
                     id: 'main-jsx',
                     name: 'main.jsx',
                     type: 'file',
-                    content:
-                        `import React from 'react'
+                    content: `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './App.css'
@@ -128,8 +120,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     id: 'button-jsx',
                     name: 'Button.jsx',
                     type: 'file',
-                    content:
-                        `export function Button({ children, onClick, variant = 'primary' }) {
+                    content: `export function Button({ children, onClick, variant = 'primary' }) {
   return (
     <button
       className={\`btn btn--\${variant}\`}
@@ -146,8 +137,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             id: 'pkg-json',
             name: 'package.json',
             type: 'file',
-            content:
-                `{
+            content: `{
   "name": "my-project",
   "version": "1.0.0",
   "type": "module",
@@ -180,7 +170,6 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
 
     const getNode = useCallback(id => findById(tree, id), [tree]);
 
-    // Open a file tab and make it active
     const openFile = useCallback(id => {
         const node = findById(tree, id);
         if (!node || node.type !== 'file') return;
@@ -188,7 +177,6 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
         setActiveFileId(id);
     }, [tree]);
 
-    // Close a tab. If it was active, activate the nearest remaining tab
     const closeFile = useCallback(id => {
         setOpenFileIds(prev => {
             const next = prev.filter(f => f !== id);
@@ -201,21 +189,17 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
         });
     }, []);
 
-    // Update file content (called by Monaco onChange)
     const updateContent = useCallback((id, content) => {
         setTree(prev => updateNode(prev, id, () => ({ content })));
     }, []);
 
-    // Expand / collapse a folder
     const toggleFolder = useCallback(id => {
         setTree(prev => updateNode(prev, id, node => ({ expanded: !node.expanded })));
     }, []);
 
-    // Create a new file inside parentId
     const createFile = useCallback((parentId, name) => {
         const id = genId();
         setTree(prev => insertNode(prev, parentId, { id, name, type: 'file', content: '' }));
-        // Open the new file after state flushes
         setTimeout(() => {
             setOpenFileIds(prev => [...prev, id]);
             setActiveFileId(id);
@@ -223,14 +207,12 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
         return id;
     }, []);
 
-    // Create a new folder inside parentId
     const createFolder = useCallback((parentId, name) => {
         const id = genId();
         setTree(prev => insertNode(prev, parentId, { id, name, type: 'folder', expanded: true, children: [] }));
         return id;
     }, []);
 
-    // Delete a node (and close any open tabs for files inside it)
     const deleteNode = useCallback(id => {
         const node = findById(tree, id);
         if (!node) return;
@@ -245,7 +227,6 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
         });
     }, [tree]);
 
-    // Commit a rename
     const renameNode = useCallback((id, newName) => {
         if (newName.trim()) {
             setTree(prev => updateNode(prev, id, () => ({ name: newName.trim() })));
@@ -256,21 +237,19 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
     const startRename = useCallback(id => setRenamingId(id), []);
     const cancelRename = useCallback(() => setRenamingId(null), []);
 
+    // Replace the entire tree from a flat { "path": "content" } map (used by template loader)
+    const resetTree = useCallback((flatFiles) => {
+        setTree(buildTreeFromFlat(flatFiles));
+        setOpenFileIds([]);
+        setActiveFileId(null);
+        setRenamingId(null);
+    }, []);
+
     return {
-        tree,
-        openFileIds,
-        activeFileId,
-        renamingId,
-        getNode,
-        openFile,
-        closeFile,
-        updateContent,
-        toggleFolder,
-        createFile,
-        createFolder,
-        deleteNode,
-        renameNode,
-        startRename,
-        cancelRename,
+        tree, openFileIds, activeFileId, renamingId,
+        getNode, openFile, closeFile, updateContent,
+        toggleFolder, createFile, createFolder,
+        deleteNode, renameNode, startRename, cancelRename,
+        resetTree,
     };
 }
