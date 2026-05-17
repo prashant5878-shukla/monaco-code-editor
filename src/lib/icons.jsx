@@ -40,7 +40,7 @@ export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
 };
 
 export const Icons = {
-  File, Folder, FolderOpen, ChevronRight,
+  File, Folder, FolderOpen, ChevronRight, FileText,
   Plus, MoreVertical, Trash2, Edit2,
   X, Check, Send, Sparkles, AlertTriangle,
   FileBox, Code, Code2, ShieldAlert,

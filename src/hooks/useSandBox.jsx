@@ -2,17 +2,53 @@ import { Sandbox } from 'e2b';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PROJECT_DIR = '/home/user/project';
-const TIMEOUT_MS = 10 * 60 * 1000; // 10 min
+const TIMEOUT_MS = 10 * 60 * 1000;
+const STORAGE_KEY = 'e2b_active_sandbox_id';
+
+// ── Kill any sandbox left over from a previous page load ──────────────────────
+async function killStaleSandbox() {
+    const staleId = localStorage.getItem(STORAGE_KEY);
+    if (!staleId) return;
+    localStorage.removeItem(STORAGE_KEY);
+    try {
+        const sbx = await Sandbox.connect(staleId, {
+            apiKey: import.meta.env.VITE_E2B_API_KEY,
+        });
+        await sbx.kill();
+    } catch {
+        // Sandbox already dead — ignore
+    }
+}
 
 export function useSandbox() {
     const sbxRef = useRef(null);
-    const sbxIdRef = useRef(null); // preserved across pause so we can resume
+    const sbxIdRef = useRef(null);
 
     // idle | creating | writing | installing | starting | running | pausing | paused | resuming | error
     const [phase, setPhase] = useState('idle');
     const [previewUrl, setPreviewUrl] = useState(null);
     const [logs, setLogs] = useState([]);
 
+    // Kill stale sandbox on mount (handles browser refresh)
+    useEffect(() => {
+        killStaleSandbox();
+    }, []);
+
+    // Kill sandbox on page unload (handles tab close / navigation away)
+    useEffect(() => {
+        const handler = () => {
+            const id = sbxIdRef.current;
+            if (!id) return;
+            // sendBeacon survives page unload unlike fetch
+            // For now this just clears localStorage so next mount does the cleanup
+            localStorage.removeItem(STORAGE_KEY);
+            // When backend is added: navigator.sendBeacon('/api/sandbox/kill', JSON.stringify({ id }))
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, []);
+
+    // Cleanup on React unmount
     useEffect(() => () => {
         sbxRef.current?.kill().catch(() => { });
     }, []);
@@ -38,6 +74,7 @@ export function useSandbox() {
             sbxRef.current = null;
         }
         sbxIdRef.current = null;
+        localStorage.removeItem(STORAGE_KEY);
         setLogs([]);
         setPreviewUrl(null);
 
@@ -50,13 +87,13 @@ export function useSandbox() {
             });
             sbxRef.current = sbx;
             sbxIdRef.current = sbx.sandboxId;
+            localStorage.setItem(STORAGE_KEY, sbx.sandboxId); // persist for refresh recovery
             addLog('✓ Sandbox ready\n');
 
             setPhase('writing');
-            const entries = Object.entries(files);
-            addLog(`Writing ${entries.length} files…\n`);
+            addLog(`Writing ${Object.keys(files).length} files…\n`);
             await Promise.all(
-                entries.map(([p, c]) => sbx.files.write(`${PROJECT_DIR}/${p}`, c)),
+                Object.entries(files).map(([p, c]) => sbx.files.write(`${PROJECT_DIR}/${p}`, c)),
             );
             addLog('✓ Files written\n');
 
@@ -74,17 +111,14 @@ export function useSandbox() {
 
             setPhase('starting');
             addLog(`\n$ ${runCommand}\n`);
-            // Don't await — dev server runs forever
             sbx.commands.run(runCommand, {
                 cwd: PROJECT_DIR,
                 onStdout: d => appendLog(d),
                 onStderr: d => appendLog(d, 'err'),
             });
 
-            // Give it a few seconds to boot then expose the URL
             await new Promise(r => setTimeout(r, 3000));
-            const host = sbx.getHost(port);
-            const url = `https://${host}`;
+            const url = `https://${sbx.getHost(port)}`;
             setPreviewUrl(url);
             setPhase('running');
             addLog(`\n✓ Preview → ${url}\n`);
@@ -92,31 +126,27 @@ export function useSandbox() {
         } catch (err) {
             setPhase('error');
             addLog(`\nError: ${err.message}\n`, 'err');
+            localStorage.removeItem(STORAGE_KEY);
         }
     }, []);
 
-    // ── Pause — stops billing, preserves state ────────────────────────────────────
-    // Call this when user switches away from preview mode
+    // ── Pause ─────────────────────────────────────────────────────────────────────
     const pause = useCallback(async () => {
         if (!sbxRef.current || phase !== 'running') return;
         try {
             setPhase('pausing');
             addLog('\n[Pausing sandbox…]\n');
             await sbxRef.current.pause();
-            // sandboxId is preserved in sbxIdRef so we can resume
             sbxRef.current = null;
             setPhase('paused');
-            addLog('[Sandbox paused — billing stopped]\n');
+            addLog('[Paused — billing stopped]\n');
         } catch (err) {
-            // If pause fails, keep running rather than lose the session
             setPhase('running');
-            addLog(`[Pause failed: ${err.message} — sandbox still running]\n`, 'err');
+            addLog(`[Pause failed: ${err.message}]\n`, 'err');
         }
     }, [phase]);
 
-    // ── Resume — fast restart from saved state ────────────────────────────────────
-    // Call this when user switches back to preview mode
-    // previewUrl is still valid — same sandbox ID = same host URL
+    // ── Resume ────────────────────────────────────────────────────────────────────
     const resume = useCallback(async () => {
         if (!sbxIdRef.current) return;
         try {
@@ -128,19 +158,19 @@ export function useSandbox() {
             });
             sbxRef.current = sbx;
             setPhase('running');
-            addLog('[Sandbox resumed — reload the preview]\n');
-            // previewUrl stays the same, caller just needs to reload the iframe
+            addLog('[Resumed — refresh preview]\n');
         } catch (err) {
-            // Pause state expired or resume failed — need a cold start
             setPhase('idle');
             sbxIdRef.current = null;
+            localStorage.removeItem(STORAGE_KEY);
             addLog(`[Resume failed: ${err.message} — click Run to restart]\n`, 'err');
         }
     }, []);
 
-    // ── Hard stop ─────────────────────────────────────────────────────────────────
+    // ── Stop ──────────────────────────────────────────────────────────────────────
     const stop = useCallback(async () => {
         sbxIdRef.current = null;
+        localStorage.removeItem(STORAGE_KEY);
         if (sbxRef.current) {
             await sbxRef.current.kill().catch(() => { });
             sbxRef.current = null;

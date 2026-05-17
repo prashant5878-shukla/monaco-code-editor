@@ -1,7 +1,15 @@
-import { FileExplorer } from './components/FileExplorer';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { EditorPage } from './pages/EditorPage';
+import { VivaPage } from './pages/VivaPage';
 
-function App() {
-  return <FileExplorer />;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/editor" replace />} />
+        <Route path="/editor" element={<EditorPage />} />
+        <Route path="/viva" element={<VivaPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
-
-export default App;

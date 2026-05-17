@@ -47,6 +47,70 @@ function collectFileIds(node) {
     return (node.children ?? []).flatMap(collectFileIds);
 }
 
+// ── Path-based helpers (used by applyGeneratedFiles) ─────────────────────────
+
+// Find a node by navigating a path array e.g. ['src', 'App.jsx']
+function findByPathParts(node, parts) {
+    if (parts.length === 0) return node;
+    const [head, ...rest] = parts;
+    const child = (node.children ?? []).find(c => c.name === head);
+    if (!child) return null;
+    return findByPathParts(child, rest);
+}
+
+// Returns { tree, id } where id is the file's id (new or existing).
+function insertFileAtPath(root, pathStr, content) {
+    const parts = pathStr.split('/').filter(Boolean);
+    const fileName = parts[parts.length - 1];
+    const folderParts = parts.slice(0, -1);
+
+    // File already exists → just update its content
+    const existing = findByPathParts(root, parts);
+    if (existing && existing.type === 'file') {
+        return {
+            tree: updateNode(root, existing.id, () => ({ content })),
+            id: existing.id,
+        };
+    }
+
+    const fileId = genId();
+    const newFile = { id: fileId, name: fileName, type: 'file', content };
+
+    return { tree: ensureFolderAndInsert(root, folderParts, newFile), id: fileId };
+}
+
+function ensureFolderAndInsert(node, folderParts, fileNode) {
+    if (folderParts.length === 0) {
+        // We're at the right level — insert the file
+        const children = node.children ?? [];
+        const insertAt = children.filter(c => c.type === 'folder').length;
+        const next = [...children];
+        next.splice(insertAt, 0, fileNode);
+        return { ...node, expanded: true, children: next };
+    }
+
+    const [head, ...rest] = folderParts;
+    const existingIdx = (node.children ?? []).findIndex(
+        c => c.type === 'folder' && c.name === head
+    );
+
+    if (existingIdx >= 0) {
+        // Folder exists — recurse into it
+        const children = [...node.children];
+        children[existingIdx] = ensureFolderAndInsert(children[existingIdx], rest, fileNode);
+        return { ...node, children, expanded: true };
+    } else {
+        // Folder doesn't exist — create it, recurse into it, append to children
+        const newFolder = { id: genId(), name: head, type: 'folder', expanded: true, children: [] };
+        const filled = ensureFolderAndInsert(newFolder, rest, fileNode);
+        return {
+            ...node,
+            expanded: true,
+            children: [...(node.children ?? []), filled],
+        };
+    }
+}
+
 // ── Initial file system ───────────────────────────────────────────────────────
 
 export const INITIAL_TREE = {
@@ -237,7 +301,6 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
     const startRename = useCallback(id => setRenamingId(id), []);
     const cancelRename = useCallback(() => setRenamingId(null), []);
 
-    // Replace the entire tree from a flat { "path": "content" } map (used by template loader)
     const resetTree = useCallback((flatFiles) => {
         setTree(buildTreeFromFlat(flatFiles));
         setOpenFileIds([]);
@@ -245,11 +308,31 @@ export function useFileSystem(initialTree = INITIAL_TREE) {
         setRenamingId(null);
     }, []);
 
+    const applyGeneratedFiles = useCallback((files) => {
+        const ids = [];
+
+        setTree(prev => {
+            let next = prev;
+            for (const { path, content } of files) {
+                const result = insertFileAtPath(next, path, content);
+                next = result.tree;
+                ids.push(result.id);
+            }
+            return next;
+        });
+
+        // Open all affected files after the tree update flushes, activate the first one
+        setTimeout(() => {
+            setOpenFileIds(prev => [...new Set([...prev, ...ids])]);
+            setActiveFileId(ids[0] ?? null);
+        }, 0);
+    }, []);
+
     return {
         tree, openFileIds, activeFileId, renamingId,
         getNode, openFile, closeFile, updateContent,
         toggleFolder, createFile, createFolder,
         deleteNode, renameNode, startRename, cancelRename,
-        resetTree,
+        resetTree, applyGeneratedFiles,
     };
 }

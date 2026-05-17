@@ -1,4 +1,4 @@
-import { Icons } from '../lib/icons';
+import { Icons } from '../../lib/icons';
 
 export function DiffBar({ pendingChange, additions, deletions, onAccept, onReject }) {
     if (!pendingChange) return null;

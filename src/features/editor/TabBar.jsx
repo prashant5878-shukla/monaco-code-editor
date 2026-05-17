@@ -1,5 +1,4 @@
-import { Icons } from '../lib/icons';
-import { getFileIcon } from '../lib/icons';
+import { getFileIcon, Icons } from '../../lib/icons';
 
 export function TabBar({ openFileIds, activeFileId, getNode, onActivate, onClose }) {
   return (
@@ -15,8 +14,9 @@ export function TabBar({ openFileIds, activeFileId, getNode, onActivate, onClose
             onClick={() => onActivate(id)}
             title={node.name}
             className={`group relative flex items-center gap-2.5 px-4 h-full cursor-pointer select-none whitespace-nowrap flex-shrink-0 text-sm font-sans transition-colors border-r border-border-subtle
-              ${active 
-                ? 'bg-editor text-primary font-medium' 
+                       
+              ${active
+                ? 'bg-editor text-primary font-medium'
                 : 'bg-background text-secondary hover:bg-hover'
               }`}
           >

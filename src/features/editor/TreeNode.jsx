@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ContextMenu } from './ContextMenu';
-import { getFileIcon } from '../lib/icons';
+import { getFileIcon } from '../../lib/icons';
 
 export function TreeNode({
   node, depth, activeFileId, renamingId,
@@ -8,7 +8,7 @@ export function TreeNode({
 }) {
   const [ctxMenu, setCtxMenu] = useState(null);
   const inputRef = useRef(null);
-  
+
   const isRenaming = renamingId === node.id;
   const isActive = activeFileId === node.id;
   const isFolder = node.type === 'folder';

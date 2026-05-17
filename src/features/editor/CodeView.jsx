@@ -1,8 +1,8 @@
 import Editor from '@monaco-editor/react';
 import { useMemo, useRef } from 'react';
-import { getLanguage } from '../lib/fileUtils';
-import { useMonacoDiff } from '../hooks/useMonacoDiff';
-import { MONACO_THEME_NAME, MONACO_THEME_CONFIG } from '../lib/constants';
+import { getLanguage } from '../../lib/fileUtils';
+import { useMonacoDiff } from '../../hooks/useMonacoDiff';
+import { MONACO_THEME_NAME, MONACO_THEME_CONFIG } from '../../lib/constants';
 
 function configureMonaco(monaco) {
   monaco.languages.typescript.typescriptDefaults.setCompilerOptions({

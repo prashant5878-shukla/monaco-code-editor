@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Icons } from '../lib/icons';
+import { Icons } from '../../lib/icons';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS = {
