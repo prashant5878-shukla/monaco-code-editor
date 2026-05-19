@@ -1,8 +1,26 @@
+import { useEffect, useRef } from 'react';
 import { getFileIcon, Icons } from '../../lib/icons';
 
 export function TabBar({ openFileIds, activeFileId, getNode, onActivate, onClose }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !activeFileId) return;
+    const activeTab = containerRef.current.querySelector('[data-active="true"]');
+    if (activeTab) {
+      activeTab.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      });
+    }
+  }, [activeFileId]);
+
   return (
-    <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-w-0 no-scrollbar h-full bg-background">
+    <div
+      ref={containerRef}
+      className="flex flex-1 overflow-x-auto overflow-y-hidden min-w-0 no-scrollbar h-full bg-background"
+    >
       {openFileIds.map(id => {
         const node = getNode(id);
         if (!node) return null;
@@ -13,6 +31,7 @@ export function TabBar({ openFileIds, activeFileId, getNode, onActivate, onClose
             key={id}
             onClick={() => onActivate(id)}
             title={node.name}
+            data-active={active ? "true" : "false"}
             className={`group relative flex items-center gap-2.5 px-4 h-full cursor-pointer select-none whitespace-nowrap flex-shrink-0 text-sm font-sans transition-colors border-r border-border-subtle
                        
               ${active

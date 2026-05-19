@@ -1,10 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useSandbox } from '../hooks/useSandBox';
 import { useTimer } from '../hooks/useTimer';
+import { useTestRunner } from '../hooks/useTestRunner';
+
+// ── Redux actions ─────────────────────────────────────────────────────────────
+import {
+    setViewMode,
+    setLeftPanel,
+    toggleChat,
+    setPendingChange,
+    clearPendingChange,
+    setDiffStats,
+    clearDiffStats,
+} from '../store/editorSlice';
+import {
+    startInterview,
+    setShowSubmitModal,
+} from '../store/interviewSlice';
 
 // ── Feature components ────────────────────────────────────────────────────────
 import { Sidebar } from '../features/editor/Sidebar';
@@ -15,6 +32,8 @@ import { ChatPanel } from '../features/chat/ChatPanel';
 import { PreviewPanel } from '../features/sandbox/PreviewPanel';
 import { SubmitModal } from '../features/interview/SubmitModal';
 import { TemplateSelectModal } from '../features/interview/TemplateSelectModal';
+import { ProblemPanel } from '../features/interview/ProblemPanel';
+import { TimerBar } from '../features/interview/TimeBar';
 
 // ── Lib ───────────────────────────────────────────────────────────────────────
 import { Icons } from '../lib/icons';
@@ -23,19 +42,27 @@ import {
     getNodePath, flattenTree,
     findNodeByPath, findNodeByName,
 } from '../lib/fileUtils';
-import { TimerBar } from '../features/interview/TimeBar';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Fallback config when no template is loaded ────────────────────────────────
+// readyPattern comes from the template; this is only used if the user
+// clicks Run manually without having selected a template.
 function detectRunConfig(files) {
     try {
         const pkg = JSON.parse(files['package.json'] ?? '{}');
+        const isVite = !!pkg.scripts?.dev;
         return {
             installCommand: 'npm install',
-            runCommand: pkg.scripts?.dev ? 'npm run dev -- --host' : 'npm start',
-            port: pkg.scripts?.dev ? 5173 : 3000,
+            runCommand: isVite ? 'npm run dev -- --host' : 'npm start',
+            port: isVite ? 5173 : 3001,
+            readyPattern: isVite ? 'local:' : 'running on port',
         };
     } catch {
-        return { installCommand: null, runCommand: 'node index.js', port: 3000 };
+        return {
+            installCommand: null,
+            runCommand: 'node index.js',
+            port: 3001,
+            readyPattern: 'running on port',
+        };
     }
 }
 
@@ -45,8 +72,8 @@ function ActivityIcon({ active, title, children, onClick, hasNotification }) {
             title={title}
             onClick={onClick}
             className={`relative flex items-center justify-center w-12 h-12 border-none
-                  cursor-pointer transition-colors
-                  ${active ? 'text-primary' : 'text-muted hover:text-primary'}`}
+                        cursor-pointer transition-colors
+                        ${active ? 'text-primary' : 'text-muted hover:text-primary'}`}
         >
             {active && <div className="absolute left-0 top-3 bottom-3 w-[2px] bg-accent" />}
             {children}
@@ -65,9 +92,7 @@ function EmptyEditor() {
                     <Icons.Code2 className="w-20 h-20 text-accent/60" />
                 </div>
                 <div>
-                    <p className="text-sm font-medium text-secondary mb-1">
-                        No file open
-                    </p>
+                    <p className="text-sm font-medium text-secondary mb-1">No file open</p>
                     <p className="text-xs text-muted leading-relaxed">
                         Select a file or generate code with AI →
                     </p>
@@ -80,7 +105,15 @@ function EmptyEditor() {
 // ── EditorPage ────────────────────────────────────────────────────────────────
 export function EditorPage() {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
 
+    // ── Redux state ───────────────────────────────────────────────────────────
+    const { viewMode, leftPanel, showChat, pendingChange, diffStats } =
+        useSelector(s => s.editor);
+    const { started, runConfig, showSubmitModal } =
+        useSelector(s => s.interview);
+
+    // ── Hooks ─────────────────────────────────────────────────────────────────
     const {
         tree, openFileIds, activeFileId, renamingId,
         getNode, openFile, closeFile, updateContent,
@@ -90,53 +123,58 @@ export function EditorPage() {
     } = useFileSystem();
 
     const sandbox = useSandbox();
+    const timer = useTimer(45, () => dispatch(setShowSubmitModal(true)));
 
-    const timer = useTimer(45, () => setShowSubmitModal(true));
+    const {
+        results: testResults,
+        isRunning: testsRunning,
+        summary: testSummary,
+        runTests,
+    } = useTestRunner();
 
-    // ── UI state ─────────────────────────────────────────────────────────────────
-    const [started, setStarted] = useState(false); // false = show template modal
-    const [showChat, setShowChat] = useState(true);
-    const [showSidebar, setShowSidebar] = useState(true);
-    const [showSubmitModal, setShowSubmitModal] = useState(false);
-    const [viewMode, setViewMode] = useState('code'); // 'code' | 'preview'
-    const [pendingChange, setPendingChange] = useState(null);
-    const [diffStats, setDiffStats] = useState(null);
-    const [runConfig, setRunConfig] = useState(null);
+    // ── Local UI state ────────────────────────────────────────────────────────
     const [sidebarWidth, setSidebarWidth] = useState(260);
+    const [runTestsActive, setRunTestsActive] = useState(false);
     const isDragging = useRef(false);
+
+    const scenario1Complete =
+        testSummary?.passed === 10 && testSummary?.total === 10;
 
     const activeNode = activeFileId ? getNode(activeFileId) : null;
     const activePath = activeFileId
         ? (getNodePath(tree, activeFileId) ?? activeNode?.name)
         : null;
 
-    // ── Template select + auto-start ─────────────────────────────────────────────
+    // ── Template select + auto-start ──────────────────────────────────────────
+    // Build full config from template (includes port, readyPattern, waitMs)
+    // so sandbox.start() gets everything it needs from templates.js directly.
     function handleStart(templateKey) {
         const tpl = TEMPLATES[templateKey];
         if (!tpl) return;
 
-        // const config = {
-        //     installCommand: tpl.installCommand,
-        //     runCommand: tpl.runCommand,
-        //     port: tpl.port,
-        // };
+        const config = {
+            installCommand: tpl.installCommand,
+            runCommand: tpl.runCommand,
+            port: tpl.port,
+            readyPattern: tpl.readyPattern,
+            waitMs: tpl.waitMs,     // undefined for most templates, 45000 for fullstack
+        };
 
-        // setRunConfig(config);
         resetTree(tpl.files);
-        timer.start();                          // timer starts immediately
-        // sandbox.start({ files: tpl.files, ...config }); // sandbox boots in background
-        setStarted(true);
+        dispatch(startInterview({ runConfig: config }));
+        timer.start();
+        // sandbox.start({ files: tpl.files, ...config });
     }
 
-    // ── View mode: pause/resume sandbox ──────────────────────────────────────────
+    // ── View mode ─────────────────────────────────────────────────────────────
     function switchViewMode(next) {
         if (next === viewMode) return;
         if (viewMode === 'preview' && sandbox.isRunning) sandbox.pause();
         if (next === 'preview' && sandbox.canResume) sandbox.resume();
-        setViewMode(next);
+        dispatch(setViewMode(next));
     }
 
-    // ── File management ───────────────────────────────────────────────────────────
+    // ── File management ───────────────────────────────────────────────────────
     function handleCreate(parentId, type) {
         const name = window.prompt(`${type === 'file' ? 'File' : 'Folder'} name:`);
         if (!name?.trim()) return;
@@ -145,7 +183,7 @@ export function EditorPage() {
             : createFolder(parentId, name.trim());
     }
 
-    // ── AI single-file edit ───────────────────────────────────────────────────────
+    // ── AI single-file edit ───────────────────────────────────────────────────
     function handleApplyChanges(targetFilePath, newContent, changedLines) {
         let node = findNodeByPath(tree, targetFilePath);
         if (!node) node = findNodeByName(tree, targetFilePath.split('/').pop());
@@ -153,37 +191,59 @@ export function EditorPage() {
 
         openFile(node.id);
         updateContent(node.id, newContent);
-        setPendingChange({
+        dispatch(setPendingChange({
             nodeId: node.id,
             filePath: targetFilePath,
             originalContent: node.content ?? '',
             changedLines,
-        });
-        setDiffStats(null);
+        }));
+        dispatch(clearDiffStats());
     }
 
-    function handleAccept() { setPendingChange(null); setDiffStats(null); }
+    function handleAccept() {
+        dispatch(clearPendingChange());
+        dispatch(clearDiffStats());
+    }
+
     function handleReject() {
         if (!pendingChange) return;
         updateContent(pendingChange.nodeId, pendingChange.originalContent);
-        setPendingChange(null);
-        setDiffStats(null);
+        dispatch(clearPendingChange());
+        dispatch(clearDiffStats());
     }
 
-    // ── AI multi-file generation ──────────────────────────────────────────────────
+    // ── AI multi-file generation ──────────────────────────────────────────────
     function handleApplyGeneratedFiles(files) {
         applyGeneratedFiles(files);
     }
 
-    // ── Submit → navigate to viva ─────────────────────────────────────────────────
+    // ── Submit → navigate to viva ─────────────────────────────────────────────
     function handleSubmitConfirm() {
-        setShowSubmitModal(false);
+        dispatch(setShowSubmitModal(false));
         timer.stop();
         sandbox.stop();
-        navigate('/viva', { state: { templateKey: runConfig } });
+        navigate('/viva', { state: { runConfig } });
     }
 
-    // ── Sidebar resize ────────────────────────────────────────────────────────────
+    // ── Run tests ─────────────────────────────────────────────────────────────
+    function handleRunTests() {
+        dispatch(setLeftPanel('problem'));
+        setRunTestsActive(true);
+        setTimeout(() => setRunTestsActive(false), 100);
+        if (sandbox.previewUrl) {
+            runTests({ scenarioId: 1, sandboxUrl: sandbox.previewUrl });
+        }
+    }
+
+    // ── Activity bar toggles ──────────────────────────────────────────────────
+    function toggleExplorer() {
+        dispatch(setLeftPanel(leftPanel === 'explorer' ? null : 'explorer'));
+    }
+    function toggleProblem() {
+        dispatch(setLeftPanel(leftPanel === 'problem' ? null : 'problem'));
+    }
+
+    // ── Sidebar resize ────────────────────────────────────────────────────────
     const handleMouseDown = useCallback(e => {
         e.preventDefault();
         isDragging.current = true;
@@ -192,8 +252,7 @@ export function EditorPage() {
 
         const onMove = ev => {
             if (!isDragging.current) return;
-            const w = Math.min(600, Math.max(150, ev.clientX - 48));
-            setSidebarWidth(w);
+            setSidebarWidth(Math.min(600, Math.max(150, ev.clientX - 48)));
         };
         const onUp = () => {
             isDragging.current = false;
@@ -211,21 +270,22 @@ export function EditorPage() {
     const activePending = pendingChange && activeFileId === pendingChange.nodeId
         ? pendingChange : null;
 
-    // ── Template select screen ────────────────────────────────────────────────────
+    // ── Template select screen ────────────────────────────────────────────────
     if (!started) {
         return <TemplateSelectModal onStart={handleStart} />;
     }
 
     return (
         <div className="flex flex-col h-screen w-screen overflow-hidden
-                    bg-background text-primary font-sans">
+                        bg-background text-primary font-sans">
 
-            {/* Timer bar — always on top */}
+            {/* Timer bar */}
             <TimerBar
                 display={timer.display}
                 isWarning={timer.isWarning}
                 isDanger={timer.isDanger}
-                onSubmit={() => setShowSubmitModal(true)}
+                onSubmit={() => dispatch(setShowSubmitModal(true))}
+                onRunTests={handleRunTests}
             />
 
             {/* Submit modal */}
@@ -233,22 +293,31 @@ export function EditorPage() {
                 <SubmitModal
                     timeRemaining={timer.display}
                     onConfirm={handleSubmitConfirm}
-                    onCancel={() => setShowSubmitModal(false)}
+                    onCancel={() => dispatch(setShowSubmitModal(false))}
                 />
             )}
 
             {/* Main workspace */}
             <div className="flex flex-1 min-h-0 overflow-hidden">
 
-                {/* ── Activity bar ──────────────────────────────────────────────────── */}
+                {/* ── Activity bar ──────────────────────────────────────────── */}
                 <div className="w-12 flex-shrink-0 flex flex-col items-center py-2 gap-1
-                        bg-background border-r border-border-subtle z-10">
+                                bg-background border-r border-border-subtle z-10">
+
                     <ActivityIcon
                         title="Explorer"
-                        active={showSidebar}
-                        onClick={() => setShowSidebar(s => !s)}
+                        active={leftPanel === 'explorer'}
+                        onClick={toggleExplorer}
                     >
                         <Icons.FileBox className="w-[22px] h-[22px]" strokeWidth={1.5} />
+                    </ActivityIcon>
+
+                    <ActivityIcon
+                        title="Problem"
+                        active={leftPanel === 'problem'}
+                        onClick={toggleProblem}
+                    >
+                        <Icons.BookOpen className="w-[22px] h-[22px]" strokeWidth={1.5} />
                     </ActivityIcon>
 
                     <div className="flex-1" />
@@ -256,10 +325,14 @@ export function EditorPage() {
                     <ActivityIcon
                         title={sandbox.isRunning || sandbox.isBusy ? 'Stop' : 'Run project'}
                         active={sandbox.isRunning}
-                        onClick={sandbox.isRunning || sandbox.isBusy ? sandbox.stop : () => {
-                            const config = runConfig ?? detectRunConfig(allFiles);
-                            sandbox.start({ files: allFiles, ...config });
-                        }}
+                        onClick={sandbox.isRunning || sandbox.isBusy
+                            ? sandbox.stop
+                            : () => {
+                                // Use saved runConfig from template, fall back to auto-detect
+                                const config = runConfig ?? detectRunConfig(allFiles);
+                                sandbox.start({ files: allFiles, ...config });
+                            }
+                        }
                     >
                         {sandbox.isRunning || sandbox.isBusy
                             ? <Icons.Square className="w-[20px] h-[20px]" strokeWidth={1.5} />
@@ -270,15 +343,15 @@ export function EditorPage() {
                     <ActivityIcon
                         title="AI Chat"
                         active={showChat}
-                        onClick={() => setShowChat(s => !s)}
+                        onClick={() => dispatch(toggleChat())}
                         hasNotification={!!pendingChange}
                     >
                         <Icons.Sparkles className="w-[22px] h-[22px]" strokeWidth={1.5} />
                     </ActivityIcon>
                 </div>
 
-                {/* ── Sidebar ───────────────────────────────────────────────────────── */}
-                {showSidebar && (
+                {/* ── Left panel: Explorer OR Problem ───────────────────────── */}
+                {leftPanel === 'explorer' && (
                     <>
                         <div style={{ width: sidebarWidth }} className="flex-shrink-0">
                             <Sidebar
@@ -297,19 +370,30 @@ export function EditorPage() {
                         <div
                             onMouseDown={handleMouseDown}
                             className="w-[1px] bg-border-subtle hover:bg-accent cursor-col-resize
-                         flex-shrink-0 relative z-10 transition-colors
-                         after:content-[''] after:absolute after:inset-y-0
-                         after:-left-1 after:w-3 after:cursor-col-resize"
+                                       flex-shrink-0 relative z-10 transition-colors
+                                       after:content-[''] after:absolute after:inset-y-0
+                                       after:-left-1 after:w-3 after:cursor-col-resize"
                         />
                     </>
                 )}
 
-                {/* ── Editor area ───────────────────────────────────────────────────── */}
+                {leftPanel === 'problem' && (
+                    <ProblemPanel
+                        activeTestTab={runTestsActive}
+                        onRunTests={handleRunTests}
+                        testResults={testResults}
+                        isRunning={testsRunning}
+                        summary={testSummary}
+                        scenario1Complete={scenario1Complete}
+                    />
+                )}
+
+                {/* ── Editor area ───────────────────────────────────────────── */}
                 <div className="flex-1 flex flex-col overflow-hidden bg-editor min-w-0">
 
                     {/* Tab bar + view toggle */}
                     <div className="flex items-center bg-background border-b border-border-subtle
-                          h-10 flex-shrink-0">
+                                    h-10 flex-shrink-0">
                         <div className="flex items-center h-full overflow-hidden flex-1 min-w-0">
                             <TabBar
                                 openFileIds={openFileIds}
@@ -320,9 +404,8 @@ export function EditorPage() {
                             />
                         </div>
 
-                        {/* View mode */}
                         <div className="flex items-center gap-0.5 px-3 h-full flex-shrink-0
-                            border-l border-border-subtle bg-sidebar">
+                                        border-l border-border-subtle bg-sidebar">
                             {[
                                 { mode: 'code', icon: <Icons.Code2 className="w-4 h-4" />, title: 'Code' },
                                 { mode: 'preview', icon: <Icons.AppWindow className="w-4 h-4" />, title: 'Preview' },
@@ -332,7 +415,7 @@ export function EditorPage() {
                                     onClick={() => switchViewMode(mode)}
                                     title={title}
                                     className={`flex items-center justify-center p-1.5 rounded-md transition-colors
-                    ${viewMode === mode
+                                        ${viewMode === mode
                                             ? 'bg-active text-primary'
                                             : 'text-muted hover:text-primary hover:bg-hover'
                                         }`}
@@ -365,7 +448,7 @@ export function EditorPage() {
                                         ? { originalContent: activePending.originalContent }
                                         : null
                                     }
-                                    onDiffStats={setDiffStats}
+                                    onDiffStats={stats => dispatch(setDiffStats(stats))}
                                 />
                             ) : (
                                 <EmptyEditor />
@@ -386,24 +469,24 @@ export function EditorPage() {
                                 }}
                                 onStop={sandbox.stop}
                                 onResume={sandbox.resume}
-                                onClose={() => switchViewMode('code')}
+                                onClose={() => dispatch(setViewMode('code'))}
                                 onClearLogs={sandbox.clearLogs}
                             />
                         )}
                     </div>
                 </div>
 
-                {/* ── Chat panel ────────────────────────────────────────────────────── */}
+                {/* ── Chat panel ────────────────────────────────────────────── */}
                 {showChat && (
                     <div className="w-[360px] flex-shrink-0 border-l border-border-subtle
-                          flex flex-col bg-sidebar">
+                                    flex flex-col bg-sidebar">
                         <ChatPanel
                             allFiles={allFiles}
                             fileNames={fileNames}
                             pendingChange={pendingChange}
                             onApplyChanges={handleApplyChanges}
                             onApplyGeneratedFiles={handleApplyGeneratedFiles}
-                            onClose={() => setShowChat(false)}
+                            onClose={() => dispatch(toggleChat())}
                         />
                     </div>
                 )}

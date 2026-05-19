@@ -8,6 +8,7 @@ const EDITOR_LINE_HEIGHT = 22;
 export function useMonacoDiff(editorRef, monacoRef, pendingChange, currentCode, onStats) {
     const decorationIds = useRef([]);
     const zoneIds = useRef([]);
+    const prevStats = useRef(undefined);
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -17,12 +18,22 @@ export function useMonacoDiff(editorRef, monacoRef, pendingChange, currentCode, 
         clearVisuals(editor, decorationIds, zoneIds);
 
         if (!pendingChange) {
-            onStats?.(null);
+            if (prevStats.current !== null) {
+                prevStats.current = null;
+                onStats?.(null);
+            }
             return;
         }
 
         const diff = diffLines(pendingChange.originalContent, currentCode);
-        onStats?.({ additions: diff.additions, deletions: diff.deletions });
+        if (
+            !prevStats.current ||
+            prevStats.current.additions !== diff.additions ||
+            prevStats.current.deletions !== diff.deletions
+        ) {
+            prevStats.current = { additions: diff.additions, deletions: diff.deletions };
+            onStats?.(prevStats.current);
+        }
 
         applyGreenDecorations(editor, monaco, diff.added, decorationIds);
         applyRedZones(editor, diff.removed, zoneIds);

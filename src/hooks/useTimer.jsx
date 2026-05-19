@@ -1,65 +1,75 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { tickTimer, stopTimer } from '../store/interviewSlice';
+import { SESSION_DURATION_MINUTES } from '../lib/constants';
 
 /**
  * Countdown timer.
- * @param {number} durationMinutes  — how long the session runs
+ * Reads timerRunning / timerRemaining from interviewSlice.
+ * Keeps the setInterval locally — dispatches tickTimer() each second.
+ * External API is identical to the original useTimer hook.
+ *
+ * @param {number} durationMinutes  — kept for API compatibility; actual
+ *                                    duration is set in interviewSlice initial state
  * @param {function} onExpire       — called when timer hits zero
  */
-export function useTimer(durationMinutes = 45, onExpire) {
-    const totalSeconds = durationMinutes * 60;
-    const [remaining, setRemaining] = useState(totalSeconds);
-    const [running, setRunning] = useState(false);
-    const intervalRef = useRef(null);
-    const onExpireRef = useRef(onExpire);
+export function useTimer(durationMinutes = SESSION_DURATION_MINUTES, onExpire) {
+    const dispatch      = useDispatch();
+    const timerRunning  = useSelector(s => s.interview.timerRunning);
+    const remaining     = useSelector(s => s.interview.timerRemaining);
+
+    const totalSeconds  = durationMinutes * 60;
+    const intervalRef   = useRef(null);
+    const onExpireRef   = useRef(onExpire);
 
     useEffect(() => { onExpireRef.current = onExpire; }, [onExpire]);
 
-    const start = useCallback(() => {
-        setRunning(true);
-    }, []);
-
-    const stop = useCallback(() => {
-        setRunning(false);
-        clearInterval(intervalRef.current);
-    }, []);
-
-    const reset = useCallback(() => {
-        stop();
-        setRemaining(totalSeconds);
-    }, [stop, totalSeconds]);
-
+    // The interval lives here — it dispatches to Redux on each tick
     useEffect(() => {
-        if (!running) return;
+        if (!timerRunning) {
+            clearInterval(intervalRef.current);
+            return;
+        }
 
         intervalRef.current = setInterval(() => {
-            setRemaining(prev => {
-                if (prev <= 1) {
-                    clearInterval(intervalRef.current);
-                    setRunning(false);
-                    onExpireRef.current?.();
-                    return 0;
-                }
-                return prev - 1;
-            });
+            dispatch(tickTimer());
         }, 1000);
 
         return () => clearInterval(intervalRef.current);
-    }, [running]);
+    }, [timerRunning, dispatch]);
+
+    // Fire onExpire when remaining hits 0
+    useEffect(() => {
+        if (remaining === 0 && !timerRunning) {
+            onExpireRef.current?.();
+        }
+    }, [remaining, timerRunning]);
+
+    // ── Convenience wrappers (same signatures as before) ─────────────────────
+    const start = useCallback(() => {
+        // startInterview is dispatched from EditorPage; start() is a no-op alias
+        // kept so callers that call timer.start() still work when wired correctly.
+        // EditorPage dispatches startInterview() which sets timerRunning = true.
+    }, []);
+
+    const stop = useCallback(() => {
+        dispatch(stopTimer());
+        clearInterval(intervalRef.current);
+    }, [dispatch]);
 
     // Format as MM:SS
     const minutes = Math.floor(remaining / 60).toString().padStart(2, '0');
     const seconds = (remaining % 60).toString().padStart(2, '0');
     const display = `${minutes}:${seconds}`;
 
-    // Warning thresholds
-    const isWarning = remaining <= 300 && remaining > 60;  // last 5 min
-    const isDanger = remaining <= 60;                      // last 1 min
+    const isWarning = remaining <= 300 && remaining > 60;
+    const isDanger  = remaining <= 60;
     const isExpired = remaining === 0;
     const percentage = (remaining / totalSeconds) * 100;
 
     return {
         display, remaining, percentage,
         isWarning, isDanger, isExpired,
-        running, start, stop, reset,
+        running: timerRunning, start, stop,
     };
 }

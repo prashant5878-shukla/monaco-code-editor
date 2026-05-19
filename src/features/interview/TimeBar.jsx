@@ -1,6 +1,6 @@
 import { Icons } from '../../lib/icons';
 
-export function TimerBar({ display, isWarning, isDanger, onSubmit }) {
+export function TimerBar({ display, isWarning, isDanger, onSubmit, onRunTests }) {
     return (
         <div className={`relative flex items-center justify-between px-5 h-11 flex-shrink-0
                          border-b border-border-subtle transition-all duration-300
@@ -42,18 +42,31 @@ export function TimerBar({ display, isWarning, isDanger, onSubmit }) {
                 </span>
             </div>
 
-            {/* Right: submit CTA */}
-            <button
-                onClick={onSubmit}
-                className="flex items-center gap-1.5 px-5 py-1.5 text-xs font-bold
-                           bg-accent text-white rounded-full border-none cursor-pointer
-                           shadow-md shadow-accent/30
-                           hover:bg-accent-hover hover:shadow-accent/50
-                           active:scale-95 transition-all duration-150"
-            >
-                <Icons.Send className="w-3 h-3" />
-                Submit
-            </button>
+            {/* Right: Run Tests + Submit */}
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={onRunTests}
+                    className="flex items-center gap-1.5 px-3 h-7 text-xs font-semibold
+                               border border-accent text-accent rounded-full
+                               hover:bg-accent/10 transition-colors cursor-pointer
+                               bg-transparent"
+                >
+                    <Icons.FlaskConical className="w-3 h-3" />
+                    Run Tests
+                </button>
+
+                <button
+                    onClick={onSubmit}
+                    className="flex items-center gap-1.5 px-5 py-1.5 text-xs font-bold
+                               bg-accent text-white rounded-full border-none cursor-pointer
+                               shadow-md shadow-accent/30
+                               hover:bg-accent-hover hover:shadow-accent/50
+                               active:scale-95 transition-all duration-150"
+                >
+                    <Icons.Send className="w-3 h-3" />
+                    Submit
+                </button>
+            </div>
         </div>
     );
 }

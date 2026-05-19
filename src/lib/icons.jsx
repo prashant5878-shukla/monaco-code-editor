@@ -7,6 +7,7 @@ import {
   FilePlus, FolderPlus,
   MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
   Layers, Play, Square,
+  BookOpen, FlaskConical,
 } from 'lucide-react';
 
 export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
@@ -47,4 +48,5 @@ export const Icons = {
   FilePlus, FolderPlus,
   MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
   Layers, Play, Square,
+  BookOpen, FlaskConical,
 };

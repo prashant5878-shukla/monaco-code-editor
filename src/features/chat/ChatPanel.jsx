@@ -4,26 +4,7 @@ import { useGenerate } from '../../hooks/useGenerate';
 import { Icons } from '../../lib/icons';
 import { CHAT_SUGGESTIONS } from '../../lib/constants';
 
-// ── Mock problem — replace with real data from DB later ───────────────────────
-const PROBLEM = {
-  title: 'Todo REST API',
-  difficulty: 'Medium',
-  description: 'Build a REST API for a todo list application using Node.js and Express.',
-  requirements: [
-    'GET /api/todos — return all todos as JSON array',
-    'POST /api/todos — create a new todo (title required)',
-    'PUT /api/todos/:id — update a todo by id',
-    'DELETE /api/todos/:id — delete a todo by id',
-    'Return appropriate HTTP status codes',
-    'Handle errors gracefully',
-  ],
-  example: {
-    request: 'POST /api/todos\n{ "title": "Buy groceries" }',
-    response: '201 Created\n{ "id": 1, "title": "Buy groceries", "done": false }',
-  },
-};
 
-// ── Detect if prompt wants file generation vs editing an existing file ─────────
 // Heuristic: generation keywords at the start of the prompt
 const GENERATION_TRIGGERS = [
   'create', 'generate', 'build', 'make', 'add a new',
@@ -35,76 +16,6 @@ function isGenerationRequest(prompt) {
   return GENERATION_TRIGGERS.some(t => lower.startsWith(t));
 }
 
-// ── Problem statement (collapsible) ──────────────────────────────────────────
-const ProblemStatement = () => {
-  const [collapsed, setCollapsed] = useState(true);
-
-  return (
-    <div className="border-b border-border-subtle flex-shrink-0 bg-sidebar/60">
-
-      {/* Toggle row */}
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center justify-between px-4 py-3
-                   bg-transparent border-none cursor-pointer hover:bg-hover transition-colors"
-      >
-        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-          <Icons.FileText className="w-3.5 h-3.5 text-accent flex-shrink-0" />
-          <span className="text-[10px] font-bold text-muted uppercase tracking-widest flex-shrink-0">
-            PROBLEM
-          </span>
-          {collapsed && (
-            <span className="text-xs font-medium text-primary truncate opacity-80">
-              · {PROBLEM.title}
-            </span>
-          )}
-          {!collapsed && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0
-              ${PROBLEM.difficulty === 'Easy' ? 'bg-success/10 text-success' :
-                PROBLEM.difficulty === 'Medium' ? 'bg-warning/10 text-warning' :
-                  'bg-danger/10 text-danger'}`}>
-              {PROBLEM.difficulty}
-            </span>
-          )}
-        </div>
-        <Icons.ChevronRight
-          className={`w-3.5 h-3.5 text-muted flex-shrink-0 transition-transform duration-200 ease-in-out
-                      ${collapsed ? '' : 'rotate-90'}`}
-        />
-      </button>
-
-      {/* Content */}
-      {!collapsed && (
-        <div className="px-4 pb-4 space-y-3.5 max-h-[260px] overflow-y-auto no-scrollbar">
-          <div>
-            <p className="text-sm font-bold text-primary mb-0.5">{PROBLEM.title}</p>
-            <p className="text-[12px] text-secondary leading-relaxed">{PROBLEM.description}</p>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Requirements</p>
-            <ul className="space-y-1.5">
-              {PROBLEM.requirements.map((r, i) => (
-                <li key={i} className="border-l-2 border-accent/40 pl-3 text-[12px] text-secondary leading-relaxed">
-                  {r}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">Example</p>
-            <pre className="bg-background border border-border-subtle rounded-lg
-                            px-3 py-2 text-[11px] font-mono text-secondary
-                            whitespace-pre-wrap leading-relaxed">
-              {PROBLEM.example.request}{'\n\n'}{PROBLEM.example.response}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 function Message({ msg }) {
@@ -315,9 +226,6 @@ export function ChatPanel({
           </button>
         </div>
       </div>
-
-      {/* Problem statement */}
-      <ProblemStatement />
 
       {/* File pills */}
       {fileNames.length > 0 && (
