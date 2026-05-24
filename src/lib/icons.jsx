@@ -8,6 +8,7 @@ import {
   MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
   Layers, Play, Square,
   BookOpen, FlaskConical,
+  Wifi, Copy, RotateCcw,
 } from 'lucide-react';
 
 export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
@@ -49,4 +50,5 @@ export const Icons = {
   MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
   Layers, Play, Square,
   BookOpen, FlaskConical,
+  Wifi, Copy, RotateCcw,
 };

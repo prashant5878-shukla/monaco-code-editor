@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -34,8 +34,8 @@ import { SubmitModal } from '../features/interview/SubmitModal';
 import { TemplateSelectModal } from '../features/interview/TemplateSelectModal';
 import { ProblemPanel } from '../features/interview/ProblemPanel';
 import { TimerBar } from '../features/interview/TimeBar';
+import { ApiClient } from '../features/interview/ApiClient';
 
-// ── Lib ───────────────────────────────────────────────────────────────────────
 import { Icons } from '../lib/icons';
 import { TEMPLATES } from '../lib/templates';
 import {
@@ -43,9 +43,7 @@ import {
     findNodeByPath, findNodeByName,
 } from '../lib/fileUtils';
 
-// ── Fallback config when no template is loaded ────────────────────────────────
-// readyPattern comes from the template; this is only used if the user
-// clicks Run manually without having selected a template.
+
 function detectRunConfig(files) {
     try {
         const pkg = JSON.parse(files['package.json'] ?? '{}');
@@ -112,7 +110,6 @@ export function EditorPage() {
         useSelector(s => s.editor);
     const { started, runConfig, showSubmitModal } =
         useSelector(s => s.interview);
-
     // ── Hooks ─────────────────────────────────────────────────────────────────
     const {
         tree, openFileIds, activeFileId, renamingId,
@@ -133,7 +130,7 @@ export function EditorPage() {
     } = useTestRunner();
 
     // ── Local UI state ────────────────────────────────────────────────────────
-    const [sidebarWidth, setSidebarWidth] = useState(260);
+    const [sidebarWidth, setSidebarWidth] = useState(300);
     const [runTestsActive, setRunTestsActive] = useState(false);
     const isDragging = useRef(false);
 
@@ -320,6 +317,14 @@ export function EditorPage() {
                         <Icons.BookOpen className="w-[22px] h-[22px]" strokeWidth={1.5} />
                     </ActivityIcon>
 
+                    <ActivityIcon
+                        title="API Client"
+                        active={leftPanel === 'api'}
+                        onClick={() => dispatch(setLeftPanel(leftPanel === 'api' ? null : 'api'))}
+                    >
+                        <Icons.Wifi className="w-[22px] h-[22px]" strokeWidth={1.5} />
+                    </ActivityIcon>
+
                     <div className="flex-1" />
 
                     <ActivityIcon
@@ -350,22 +355,37 @@ export function EditorPage() {
                     </ActivityIcon>
                 </div>
 
-                {/* ── Left panel: Explorer OR Problem ───────────────────────── */}
-                {leftPanel === 'explorer' && (
+                {/* ── Left panel: Explorer OR Problem OR API Client ─────────── */}
+                {leftPanel && (
                     <>
-                        <div style={{ width: sidebarWidth }} className="flex-shrink-0">
-                            <Sidebar
-                                tree={tree}
-                                activeFileId={activeFileId}
-                                renamingId={renamingId}
-                                onOpen={openFile}
-                                onToggle={toggleFolder}
-                                onCreate={handleCreate}
-                                onDelete={deleteNode}
-                                onStartRename={startRename}
-                                onRename={renameNode}
-                                onCancelRename={cancelRename}
-                            />
+                        <div style={{ width: sidebarWidth }} className="flex-shrink-0 flex flex-col min-w-0">
+                            {leftPanel === 'explorer' && (
+                                <Sidebar
+                                    tree={tree}
+                                    activeFileId={activeFileId}
+                                    renamingId={renamingId}
+                                    onOpen={openFile}
+                                    onToggle={toggleFolder}
+                                    onCreate={handleCreate}
+                                    onDelete={deleteNode}
+                                    onStartRename={startRename}
+                                    onRename={renameNode}
+                                    onCancelRename={cancelRename}
+                                />
+                            )}
+                            {leftPanel === 'problem' && (
+                                <ProblemPanel
+                                    activeTestTab={runTestsActive}
+                                    onRunTests={handleRunTests}
+                                    testResults={testResults}
+                                    isRunning={testsRunning}
+                                    summary={testSummary}
+                                    scenario1Complete={scenario1Complete}
+                                />
+                            )}
+                            {leftPanel === 'api' && (
+                                <ApiClient previewUrl={sandbox.previewUrl} />
+                            )}
                         </div>
                         <div
                             onMouseDown={handleMouseDown}
@@ -375,17 +395,6 @@ export function EditorPage() {
                                        after:-left-1 after:w-3 after:cursor-col-resize"
                         />
                     </>
-                )}
-
-                {leftPanel === 'problem' && (
-                    <ProblemPanel
-                        activeTestTab={runTestsActive}
-                        onRunTests={handleRunTests}
-                        testResults={testResults}
-                        isRunning={testsRunning}
-                        summary={testSummary}
-                        scenario1Complete={scenario1Complete}
-                    />
                 )}
 
                 {/* ── Editor area ───────────────────────────────────────────── */}
@@ -478,17 +487,27 @@ export function EditorPage() {
 
                 {/* ── Chat panel ────────────────────────────────────────────── */}
                 {showChat && (
-                    <div className="w-[360px] flex-shrink-0 border-l border-border-subtle
+                    <>
+                        {/* <div
+                            onMouseDown={handleMouseDown}
+                            className="w-[1px] bg-border-subtle hover:bg-accent cursor-col-resize
+                                       flex-shrink-0 relative z-10 transition-colors
+                                       after:content-[''] after:absolute after:inset-y-0
+                                       after:-left-1 after:w-3 after:cursor-col-resize"
+                        /> */}
+                        <div className="w-[360px] flex-shrink-0 border-l border-border-subtle
                                     flex flex-col bg-sidebar">
-                        <ChatPanel
-                            allFiles={allFiles}
-                            fileNames={fileNames}
-                            pendingChange={pendingChange}
-                            onApplyChanges={handleApplyChanges}
-                            onApplyGeneratedFiles={handleApplyGeneratedFiles}
-                            onClose={() => dispatch(toggleChat())}
-                        />
-                    </div>
+                            <ChatPanel
+                                allFiles={allFiles}
+                                fileNames={fileNames}
+                                pendingChange={pendingChange}
+                                onApplyChanges={handleApplyChanges}
+                                onApplyGeneratedFiles={handleApplyGeneratedFiles}
+                                onClose={() => dispatch(toggleChat())}
+                            />
+                        </div>
+
+                    </>
                 )}
             </div>
         </div>

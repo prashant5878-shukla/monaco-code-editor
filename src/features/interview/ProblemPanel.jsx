@@ -289,8 +289,7 @@ export function ProblemPanel({
     ];
 
     return (
-        <div className="w-[320px] flex-shrink-0 flex flex-col bg-sidebar
-                        border-r border-border-subtle overflow-hidden">
+        <div className="w-full h-full flex flex-col bg-sidebar overflow-hidden">
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 h-10
