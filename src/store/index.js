@@ -3,6 +3,8 @@ import fileSystemReducer from './fileSystemSlice';
 import editorReducer     from './editorSlice';
 import sandboxReducer    from './sandboxSlice';
 import interviewReducer  from './interviewSlice';
+import startReducer      from './startSlice';
+import apiClientReducer  from './apiClientSlice';
 
 export const store = configureStore({
     reducer: {
@@ -10,6 +12,8 @@ export const store = configureStore({
         editor:     editorReducer,
         sandbox:    sandboxReducer,
         interview:  interviewReducer,
+        start:      startReducer,
+        apiClient:  apiClientReducer,
     },
     middleware: (getDefault) =>
         // serializableCheck: false because useSandbox keeps non-serializable SDK refs

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ import { SubmitModal } from '../features/interview/SubmitModal';
 import { TemplateSelectModal } from '../features/interview/TemplateSelectModal';
 import { ProblemPanel } from '../features/interview/ProblemPanel';
 import { TimerBar } from '../features/interview/TimeBar';
-import { ApiClient } from '../features/interview/ApiClient';
+import { ApiClient } from '../features/interview/api-client';
 
 import { Icons } from '../lib/icons';
 import { TEMPLATES } from '../lib/templates';
@@ -103,7 +103,11 @@ function EmptyEditor() {
 // ── EditorPage ────────────────────────────────────────────────────────────────
 export function EditorPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const dispatch = useDispatch();
+
+    // Candidate info + template pre-selection passed from StartPage
+    const { candidateName, templateKey: preselectedTemplateKey } = location.state ?? {};
 
     // ── Redux state ───────────────────────────────────────────────────────────
     const { viewMode, leftPanel, showChat, pendingChange, diffStats } =
@@ -267,7 +271,15 @@ export function EditorPage() {
     const activePending = pendingChange && activeFileId === pendingChange.nodeId
         ? pendingChange : null;
 
-    // ── Template select screen ────────────────────────────────────────────────
+    // ── Auto-start from StartPage ─────────────────────────────────────────
+    useEffect(() => {
+        if (preselectedTemplateKey && !started) {
+            handleStart(preselectedTemplateKey);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preselectedTemplateKey]);
+
+    // ── Template select screen (fallback when no preselection) ────────────
     if (!started) {
         return <TemplateSelectModal onStart={handleStart} />;
     }
