@@ -1,7 +1,7 @@
 import {
   File, FileText, FileCode, FileJson,
   Folder, FolderOpen, ChevronRight,
-  Plus, MoreVertical, Trash2, Edit2,
+  Plus, MoreVertical, Trash2, Edit2, Pencil,
   X, Check, Send, Sparkles, AlertTriangle,
   FileBox, Code, Terminal, Code2, ShieldAlert,
   FilePlus, FolderPlus,
@@ -43,9 +43,9 @@ export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
 
 export const Icons = {
   File, Folder, FolderOpen, ChevronRight, FileText,
-  Plus, MoreVertical, Trash2, Edit2,
+  Plus, MoreVertical, Trash2, Edit2, Pencil,
   X, Check, Send, Sparkles, AlertTriangle,
-  FileBox, Code, Code2, ShieldAlert,
+  FileBox, Code, Code2, ShieldAlert, Terminal,
   FilePlus, FolderPlus,
   MonitorPlay, RefreshCw, ExternalLink, Layout, Columns, AppWindow,
   Layers, Play, Square,
