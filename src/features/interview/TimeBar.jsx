@@ -1,67 +1,93 @@
 import { Icons } from '../../lib/icons';
 
-export function TimerBar({ display, isWarning, isDanger, onSubmit, onRunTests }) {
-    return (
-        <div className={`relative flex items-center justify-between px-5 h-11 flex-shrink-0
-                         border-b border-border-subtle transition-all duration-300
-                         ${isDanger
-                ? 'bg-danger/15 animate-pulse border-danger/30'
-                : isWarning
-                    ? 'bg-warning/10 border-warning/20'
-                    : 'bg-sidebar'}`}
-        >
-            {/* Left: problem info */}
-            <div className="flex items-center gap-2.5">
-                <span className="text-sm font-bold text-primary tracking-tight">
-                    Todo REST API
-                </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border
-                    ${isDanger
-                        ? 'bg-danger/10 text-danger border-danger/25'
-                        : isWarning
-                            ? 'bg-warning/10 text-warning border-warning/25'
-                            : 'bg-warning/8 text-warning border-warning/15'}`}
-                >
-                    Medium
-                </span>
-            </div>
+// TimerBar — VS Code dark theme
+// Props: { display, isWarning, isDanger, onSubmit, onRunTests, onRun, sandboxPhase }
+export function TimerBar({ display, isWarning, isDanger, onSubmit, onRunTests, onRun, sandboxPhase }) {
+    const isBusyOrRunning =
+        sandboxPhase === 'running'   ||
+        sandboxPhase === 'installing'||
+        sandboxPhase === 'starting'  ||
+        sandboxPhase === 'creating'  ||
+        sandboxPhase === 'writing'   ||
+        sandboxPhase === 'resuming'  ||
+        sandboxPhase === 'pausing';
 
-            {/* Center: timer — absolutely centered in the bar */}
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-                <Icons.Play className={`w-3.5 h-3.5 flex-shrink-0
-                    ${isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-muted'}`}
+    const timerColor = isDanger ? '#f48771' : isWarning ? '#dcdcaa' : '#cccccc';
+
+    return (
+        <div
+            style={{ backgroundColor: '#1e1e1e', borderBottom: '1px solid #3c3c3c' }}
+            className="h-11 flex items-center justify-between px-5 flex-shrink-0"
+        >
+            {/* Left: problem title */}
+            <span style={{ color: '#cccccc' }} className="text-[13px] font-semibold">
+                Todo REST API
+            </span>
+
+            {/* Center: timer */}
+            <div className="flex items-center gap-2">
+                <Icons.Play
+                    className="w-3 h-3 flex-shrink-0"
+                    style={{ color: isDanger ? '#f48771' : '#858585' }}
                 />
-                <span className={`text-lg font-bold font-mono tabular-nums tracking-tight
-                    ${isDanger
-                        ? 'text-danger'
-                        : isWarning
-                            ? 'text-warning'
-                            : 'text-primary'}`}
+                <span
+                    className={`text-[14px] font-mono font-semibold tabular-nums${isDanger ? ' animate-pulse' : ''}`}
+                    style={{ color: timerColor }}
                 >
                     {display}
                 </span>
             </div>
 
-            {/* Right: Run Tests + Submit */}
+            {/* Right: Run | Run Tests | Submit */}
             <div className="flex items-center gap-2">
+
+                {/* Run / Stop */}
+                <button
+                    onClick={onRun}
+                    style={isBusyOrRunning
+                        ? { backgroundColor: 'transparent', border: '1px solid #f48771', color: '#f48771' }
+                        : { backgroundColor: '#2ea043', border: 'none', color: '#ffffff' }
+                    }
+                    onMouseEnter={e => {
+                        if (!isBusyOrRunning) e.currentTarget.style.backgroundColor = '#3fb950';
+                    }}
+                    onMouseLeave={e => {
+                        if (!isBusyOrRunning) e.currentTarget.style.backgroundColor = '#2ea043';
+                    }}
+                    className="flex items-center gap-1.5 px-4 h-7 rounded text-[12px] font-semibold cursor-pointer transition-colors"
+                >
+                    {isBusyOrRunning
+                        ? <Icons.Square className="w-3 h-3" />
+                        : <Icons.Play  className="w-3 h-3" />
+                    }
+                    {isBusyOrRunning ? 'Stop' : 'Run'}
+                </button>
+
+                {/* Run Tests */}
                 <button
                     onClick={onRunTests}
-                    className="flex items-center gap-1.5 px-3 h-7 text-xs font-semibold
-                               border border-accent text-accent rounded-full
-                               hover:bg-accent/10 transition-colors cursor-pointer
-                               bg-transparent"
+                    style={{ backgroundColor: 'transparent', border: '1px solid #3c3c3c', color: '#858585' }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = '#569cd6';
+                        e.currentTarget.style.color = '#569cd6';
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = '#3c3c3c';
+                        e.currentTarget.style.color = '#858585';
+                    }}
+                    className="flex items-center gap-1.5 px-3 h-7 rounded text-[12px] font-medium cursor-pointer transition-colors"
                 >
-                    <Icons.FlaskConical className="w-3 h-3" />
+                    <Icons.FlaskConical className="w-3.5 h-3.5" />
                     Run Tests
                 </button>
 
+                {/* Submit */}
                 <button
                     onClick={onSubmit}
-                    className="flex items-center gap-1.5 px-5 py-1.5 text-xs font-bold
-                               bg-accent text-white rounded-full border-none cursor-pointer
-                               shadow-md shadow-accent/30
-                               hover:bg-accent-hover hover:shadow-accent/50
-                               active:scale-95 transition-all duration-150"
+                    style={{ backgroundColor: '#0078d4', border: 'none', color: '#ffffff' }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#106ebe'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#0078d4'; }}
+                    className="flex items-center gap-1.5 px-4 h-7 rounded text-[12px] font-semibold cursor-pointer transition-colors"
                 >
                     <Icons.Send className="w-3 h-3" />
                     Submit

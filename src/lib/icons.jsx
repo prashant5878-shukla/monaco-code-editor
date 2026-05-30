@@ -9,6 +9,7 @@ import {
   Layers, Play, Square,
   BookOpen, FlaskConical,
   Wifi, Copy, RotateCcw,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 
 export const getFileIcon = (fileName, isFolder, isExpanded = false) => {
@@ -51,4 +52,5 @@ export const Icons = {
   Layers, Play, Square,
   BookOpen, FlaskConical,
   Wifi, Copy, RotateCcw,
+  PanelLeftClose, PanelLeftOpen,
 };
